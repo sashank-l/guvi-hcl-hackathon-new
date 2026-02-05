@@ -11,6 +11,10 @@ pydantic==2.5.3
 # HTTP Client for Gemini AI & GUVI Callback
 requests==2.31.0
 
+# Testing
+pytest==8.2.0
+httpx==0.27.0
+
 # Public URL Tunneling (ngrok)
 pyngrok==7.0.5
 

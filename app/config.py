@@ -2,6 +2,10 @@
 
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 API_KEY = os.getenv("HONEY_API_KEY", "guvi2026")
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "1") == "1"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

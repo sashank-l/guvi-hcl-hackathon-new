@@ -168,9 +168,21 @@ def build_reply(
     if GEMINI_API_KEY:
         reply = call_gemini(history, current_text, identity, language, scam_type)
     else:
-        if random.random() < 0.2:
-            reply = "Hello? Network issue. Please repeat."
+        text_lower = current_text.lower()
+        if "otp" in text_lower:
+            reply = "OTP? Which bank branch and account number, sirji?"
+        elif "account" in text_lower or "blocked" in text_lower:
+            reply = "Which account? Please share last 4 digits and branch."
+        elif "upi" in text_lower or "pay" in text_lower or "send" in text_lower:
+            reply = "Bhai, send UPI ID and exact amount."
         else:
-            reply = random.choice(_select_templates(scam_type, turn_count))
+            candidates = _select_templates(scam_type, turn_count)
+            last_reply = ""
+            for msg in reversed(history):
+                if msg.sender == "user":
+                    last_reply = msg.text
+                    break
+            filtered = [c for c in candidates if c != last_reply]
+            reply = random.choice(filtered or candidates)
 
     return {"reply": reply, "thought": thought}

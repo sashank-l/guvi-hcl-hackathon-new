@@ -104,10 +104,9 @@ def call_groq(
     language: str,
     scam_type: str,
 ) -> str:
+    """Call Groq API to generate contextual reply. Raises exception if fails."""
     if not GROQ_API_KEY:
-        return "Sorry, can you explain again?"
-
-    client = Groq(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+        raise ValueError("GROQ_API_KEY not configured in environment")
 
     turn_count = len(history) + 1
     phase_lines = _select_templates(scam_type, turn_count)
@@ -148,28 +147,34 @@ def call_groq(
             "Your response:"
         )
 
+    client = Groq(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
     start = time.perf_counter()
-    try:
-        if LOG_PAYLOADS:
-            logger.debug("Groq request model=%s tokens=%s", GROQ_MODEL, GROQ_MAX_TOKENS)
 
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "system", "content": system_prompt}],
-            temperature=GROQ_TEMPERATURE,
-            max_tokens=GROQ_MAX_TOKENS,
-        )
+    logger.info(
+        "Calling Groq API: model=%s, temp=%.2f, max_tokens=%d",
+        GROQ_MODEL,
+        GROQ_TEMPERATURE,
+        GROQ_MAX_TOKENS,
+    )
+    if LOG_PAYLOADS:
+        logger.debug("Groq system prompt: %s", system_prompt[:200])
 
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        logger.debug("Groq response time_ms=%.1f", elapsed_ms)
+    response = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "system", "content": system_prompt}],
+        temperature=GROQ_TEMPERATURE,
+        max_tokens=GROQ_MAX_TOKENS,
+    )
 
-        text = response.choices[0].message.content.strip()
-        if LOG_PAYLOADS:
-            logger.debug("Groq reply len=%s", len(text))
-        return text or "Please explain again."
-    except Exception as exc:
-        logger.exception("Groq call failed: %s", exc)
-        return "Sorry, I did not get that. Can you repeat?"
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info("Groq API success: time_ms=%.1f", elapsed_ms)
+
+    text = response.choices[0].message.content.strip()
+    if not text:
+        raise ValueError("Groq returned empty response")
+
+    logger.info("Groq reply: '%s' (len=%d)", text, len(text))
+    return text
 
 
 def build_reply(
@@ -179,38 +184,17 @@ def build_reply(
     language: str,
     scam_type: str,
 ) -> Dict[str, str]:
+    """Generate reply using Groq API. No fallback logic."""
     turn_count = len(history) + 1
     phase = _phase_index(turn_count)
     thought = _generate_thought(scam_type, phase)
 
+    # Guardrail for illegal requests
     if _is_illegal_request(current_text):
         reply = _guardrail_reply(language)
         return {"reply": reply, "thought": "Safety: refuse illegal request."}
 
-    if GROQ_API_KEY:
-        reply = call_groq(history, current_text, identity, language, scam_type)
-    else:
-        text_lower = current_text.lower()
-        if "otp" in text_lower:
-            reply = "OTP? Which bank branch and account number, sirji?"
-        elif "account" in text_lower or "blocked" in text_lower:
-            reply = "Which account? Please share last 4 digits and branch."
-        elif "upi" in text_lower or "pay" in text_lower or "send" in text_lower:
-            reply = "Bhai, send UPI ID and exact amount."
-        else:
-            candidates = _select_templates(scam_type, turn_count)
-            last_reply = ""
-            for msg in reversed(history):
-                if isinstance(msg, dict):
-                    sender = msg.get("sender")
-                    text = msg.get("text", "")
-                else:
-                    sender = msg.sender
-                    text = msg.text
-                if sender == "user":
-                    last_reply = text
-                    break
-            filtered = [c for c in candidates if c != last_reply]
-            reply = random.choice(filtered or candidates)
+    # Call Groq API - will raise exception if fails
+    reply = call_groq(history, current_text, identity, language, scam_type)
 
     return {"reply": reply, "thought": thought}

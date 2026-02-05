@@ -11,8 +11,8 @@ API_KEY = os.getenv("HONEY_API_KEY", "guvi2026")
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "1") == "1"
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.85"))
 GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "80"))
 

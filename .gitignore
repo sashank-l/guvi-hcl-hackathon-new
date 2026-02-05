@@ -29,3 +29,4 @@ api end point tester.txt
 venv/
 .env.local
 .env.production
+.env.example

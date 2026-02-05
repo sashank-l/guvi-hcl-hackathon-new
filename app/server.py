@@ -43,6 +43,15 @@ async def root() -> Dict[str, Any]:
     }
 
 
+@app.post("/")
+async def root_chat(
+    data: InputData,
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    return await chat(data, background_tasks, x_api_key)
+
+
 @app.post("/chat")
 async def chat(
     data: InputData,

@@ -1,12 +1,23 @@
-"""Agent behavior and Gemini integration."""
+"""Agent behavior and Groq integration."""
 
+import logging
 import random
+import time
 from typing import Any, Dict, List
 
 import requests
 
-from app.config import GEMINI_API_KEY, GEMINI_API_URL
+from app.config import (
+    GROQ_API_KEY,
+    GROQ_BASE_URL,
+    GROQ_MODEL,
+    GROQ_TEMPERATURE,
+    GROQ_MAX_TOKENS,
+    LOG_PAYLOADS,
+)
 from app.models import Message
+
+logger = logging.getLogger(__name__)
 
 PHASE_TEMPLATES = {
     "general": {
@@ -86,14 +97,14 @@ def _generate_thought(scam_type: str, phase: int) -> str:
     return f"{base}; act scared and request payment details."
 
 
-def call_gemini(
+def call_groq(
     history: List[Message],
     current_text: str,
     identity: Dict[str, Any],
     language: str,
     scam_type: str,
 ) -> str:
-    if not GEMINI_API_KEY:
+    if not GROQ_API_KEY:
         return "Sorry, can you explain again?"
 
     turn_count = len(history) + 1
@@ -102,8 +113,14 @@ def call_gemini(
 
     conversation_text = ""
     for msg in history[-6:]:
-        sender_label = "Caller" if msg.sender == "scammer" else "Me"
-        conversation_text += f"{sender_label}: {msg.text}\n"
+        if isinstance(msg, dict):
+            sender = msg.get("sender")
+            text = msg.get("text", "")
+        else:
+            sender = msg.sender
+            text = msg.text
+        sender_label = "Caller" if sender == "scammer" else "Me"
+        conversation_text += f"{sender_label}: {text}\n"
 
     if language.lower() == "hindi":
         system_prompt = (
@@ -130,23 +147,47 @@ def call_gemini(
         )
 
     payload = {
-        "contents": [{"parts": [{"text": system_prompt}]}],
-        "generationConfig": {"temperature": 0.85, "maxOutputTokens": 80, "topP": 0.9},
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+        ],
+        "temperature": GROQ_TEMPERATURE,
+        "max_tokens": GROQ_MAX_TOKENS,
     }
 
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    start = time.perf_counter()
     try:
+        if LOG_PAYLOADS:
+            logger.debug("Groq request model=%s tokens=%s", GROQ_MODEL, GROQ_MAX_TOKENS)
+
         response = requests.post(
-            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-            headers={"Content-Type": "application/json"},
+            f"{GROQ_BASE_URL}/chat/completions",
+            headers=headers,
             json=payload,
-            timeout=7,
+            timeout=10,
         )
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.debug(
+            "Groq response status=%s time_ms=%.1f", response.status_code, elapsed_ms
+        )
+
         if response.status_code != 200:
+            if LOG_PAYLOADS:
+                logger.debug("Groq error body=%s", response.text[:500])
             return "Sorry, the line is unclear. Can you repeat?"
+
         result = response.json()
-        text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        text = result["choices"][0]["message"]["content"].strip()
+        if LOG_PAYLOADS:
+            logger.debug("Groq reply len=%s", len(text))
         return text or "Please explain again."
-    except Exception:
+    except Exception as exc:
+        logger.exception("Groq call failed: %s", exc)
         return "Sorry, I did not get that. Can you repeat?"
 
 
@@ -165,8 +206,8 @@ def build_reply(
         reply = _guardrail_reply(language)
         return {"reply": reply, "thought": "Safety: refuse illegal request."}
 
-    if GEMINI_API_KEY:
-        reply = call_gemini(history, current_text, identity, language, scam_type)
+    if GROQ_API_KEY:
+        reply = call_groq(history, current_text, identity, language, scam_type)
     else:
         text_lower = current_text.lower()
         if "otp" in text_lower:
@@ -179,8 +220,14 @@ def build_reply(
             candidates = _select_templates(scam_type, turn_count)
             last_reply = ""
             for msg in reversed(history):
-                if msg.sender == "user":
-                    last_reply = msg.text
+                if isinstance(msg, dict):
+                    sender = msg.get("sender")
+                    text = msg.get("text", "")
+                else:
+                    sender = msg.sender
+                    text = msg.text
+                if sender == "user":
+                    last_reply = text
                     break
             filtered = [c for c in candidates if c != last_reply]
             reply = random.choice(filtered or candidates)

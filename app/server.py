@@ -1,6 +1,7 @@
 """FastAPI server and routing."""
 
 from datetime import datetime, timezone
+import logging
 import time
 from typing import Any, Dict, Optional
 
@@ -13,10 +14,11 @@ from app.config import (
     API_KEY,
     AUTH_ENABLED,
     ENABLE_NGROK,
-    GEMINI_API_KEY,
+    GROQ_API_KEY,
     MAX_TURNS_BEFORE_CALLBACK,
     MIN_TURNS_BEFORE_CALLBACK,
     NGROK_PORT,
+    LOG_PAYLOADS,
 )
 from app.identity import create_identity
 from app.intel import extract_intelligence, has_actionable_intel, merge_intelligence
@@ -24,6 +26,7 @@ from app.models import InputData
 from app.scam import classify_scam_type, scam_confirmed, score_scam_intent
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Agentic Honey-Pot API", version="2.0.0")
 app.add_middleware(
@@ -68,6 +71,14 @@ async def chat(
     language = data.metadata.language
 
     detected_type = classify_scam_type(current_text)
+    if LOG_PAYLOADS:
+        logger.debug(
+            "Incoming session=%s sender=%s len=%s type=%s",
+            session_id,
+            data.message.sender,
+            len(current_text),
+            detected_type,
+        )
 
     if session_id not in SESSIONS:
         SESSIONS[session_id] = {
@@ -104,6 +115,8 @@ async def chat(
         effective_history = session["history"]
 
     extracted = extract_intelligence(current_text)
+    if LOG_PAYLOADS:
+        logger.debug("Extracted intel=%s", extracted)
     session["total_intelligence"] = merge_intelligence(
         session["total_intelligence"], extracted
     )
@@ -115,7 +128,9 @@ async def chat(
         print(
             f"[AGENT HANDOFF TRIGGERED] session={session_id} type={session['scam_type']}"
         )
+    logger.debug("Scam score session=%s score=%s", session_id, session["scam_score"])
 
+    start = time.perf_counter()
     agent_plan = build_reply(
         effective_history,
         current_text,
@@ -123,8 +138,10 @@ async def chat(
         language,
         session["scam_type"],
     )
+    elapsed_ms = (time.perf_counter() - start) * 1000
     reply = agent_plan["reply"]
     print(f"[AGENT THOUGHT] session={session_id} thought={agent_plan['thought']}")
+    logger.debug("Reply len=%s time_ms=%.1f", len(reply), elapsed_ms)
 
     updated_history = list(effective_history)
     updated_history.append(
@@ -162,6 +179,11 @@ async def chat(
             f"Scam confirmed. Persona {session['identity']['name']} from {session['identity']['city']}. "
             f"Score {session['scam_score']}."
         )
+        logger.debug(
+            "Callback queued session=%s total_messages=%s",
+            session_id,
+            total_messages_exchanged,
+        )
         background_tasks.add_task(
             send_guvi_callback,
             session_id,
@@ -195,5 +217,5 @@ async def startup_event() -> None:
         except Exception:
             print("NGROK: failed to start")
 
-    if not GEMINI_API_KEY:
-        print("WARNING: GEMINI_API_KEY is not set; fallback replies enabled.")
+    if not GROQ_API_KEY:
+        print("WARNING: GROQ_API_KEY is not set; fallback replies enabled.")

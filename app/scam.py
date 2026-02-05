@@ -1,6 +1,9 @@
 """Scam intent scoring and confirmation."""
 
+import logging
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 SCAM_SIGNAL_KEYWORDS = [
     "account blocked",
@@ -76,6 +79,7 @@ def score_scam_intent(text: str, intel: Dict[str, List[str]]) -> int:
     if "send" in text_lower or "transfer" in text_lower or "pay" in text_lower:
         score += 2
 
+    logger.debug("Scam score computed=%s", score)
     return score
 
 

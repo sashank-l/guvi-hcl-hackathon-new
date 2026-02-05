@@ -1,7 +1,10 @@
 """Persona generation."""
 
+import logging
 import random
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 INDIAN_NAMES = [
     "Ramesh",
@@ -87,10 +90,17 @@ def create_identity(scam_type: str) -> Dict[str, Any]:
     profile = PROFILE_CONFIG.get(scam_type, PROFILE_CONFIG["general"])
     name = _get_unique_name(profile["name_pool"])
     age_min, age_max = profile["age_range"]
-    return {
+    identity = {
         "name": name,
         "age": random.randint(age_min, age_max),
         "city": random.choice(INDIAN_CITIES),
         "role": profile["role"],
         "scamType": scam_type,
     }
+    logger.debug(
+        "Identity created name=%s role=%s type=%s",
+        identity["name"],
+        identity["role"],
+        scam_type,
+    )
+    return identity

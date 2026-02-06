@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # ===================================
     # Redis Configuration
     # ===================================
+    redis_url_env: str = Field(default="", alias="REDIS_URL", description="Full Redis URL (overrides host/port)")
     redis_host: str = Field(default="localhost", description="Redis host")
     redis_port: int = Field(default=6379, ge=1, le=65535, description="Redis port")
     redis_db: int = Field(default=0, ge=0, description="Redis database number")
@@ -164,6 +165,9 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """Construct Redis connection URL."""
+        if self.redis_url_env:
+            return self.redis_url_env
+            
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"

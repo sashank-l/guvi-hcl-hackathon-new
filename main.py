@@ -72,13 +72,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware (adjust origins for production)
+# CORS middleware - Allow GUVI hackathon platform
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.debug else ["https://guvi.in"],
+    allow_origins=[
+        "*"  # Allow all origins for hackathon testing
+        # In production, you can restrict to:
+        # "https://guvi.in",
+        # "https://hackathon.guvi.in",
+        # "https://*.guvi.in"
+    ] if settings.debug else [
+        "https://guvi.in",
+        "https://hackathon.guvi.in",
+        "https://www.guvi.in",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -145,6 +156,13 @@ async def health_check():
         status="healthy",
         redis_connected=redis_client.is_connected(),
     )
+
+
+# OPTIONS handler for CORS preflight
+@app.options("/api/honeypot")
+async def honeypot_options():
+    """Handle CORS preflight requests."""
+    return {"message": "OK"}
 
 
 @app.post("/api/honeypot", response_model=HoneyPotResponse)
@@ -269,6 +287,38 @@ async def delete_session(
             status_code=500,
             detail="Failed to delete session",
         )
+
+
+@app.get("/api/test")
+async def test_endpoint():
+    """
+    Simple test endpoint for GUVI platform verification.
+    No authentication required.
+    """
+    return {
+        "status": "ok",
+        "message": "Honeypot API is running",
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "health": "/health",
+            "honeypot": "/api/honeypot (POST)",
+            "test": "/api/test (GET)"
+        }
+    }
+
+
+@app.post("/api/test-honeypot")
+async def test_honeypot_no_auth(request: IncomingMessage):
+    """
+    Test honeypot endpoint WITHOUT authentication for GUVI debugging.
+    Remove this in production!
+    """
+    logger.info(f"[TEST] Received test request: sessionId={request.sessionId}")
+    
+    return HoneyPotResponse(
+        status="success",
+        reply="Test response from honeypot API. Authentication is working!"
+    )
 
 
 # ===================================

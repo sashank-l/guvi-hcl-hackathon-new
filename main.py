@@ -281,13 +281,13 @@ if __name__ == "__main__":
     log_security_event(
         logger,
         "SYSTEM",
-        f"Starting server on {settings.api_host}:{settings.api_port}",
+        f"Starting server on {settings.api_host}:{settings.server_port}",
     )
     
     uvicorn.run(
         "main:app",
         host=settings.api_host,
-        port=settings.api_port,
+        port=settings.server_port,
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )

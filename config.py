@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     api_key: str = Field(..., description="Secret API key for authentication")
     api_host: str = Field(default="0.0.0.0", description="API host")
     api_port: int = Field(default=8000, ge=1, le=65535, description="API port")
+    port: int = Field(default=8000, ge=1, le=65535, description="Port (Render uses PORT env var)")
+    
+    @property
+    def server_port(self) -> int:
+        """Get the server port, preferring PORT env var (for Render) over api_port."""
+        return self.port if self.port != 8000 else self.api_port
 
     # ===================================
     # Redis Configuration
